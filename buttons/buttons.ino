@@ -14,7 +14,7 @@
 // CONSTANTS
 
 // SSID
-const char *szSsid = "nicobuch";
+const char *szSsid = "ITBA-Labs";
 
 // select 1 for the security you want, or none for no security
 #define USE_WPA2_PASSPHRASE
@@ -26,7 +26,7 @@ const char *szSsid = "nicobuch";
 // modify the security key to what you have.
 #if defined(USE_WPA2_PASSPHRASE)
 
-    const char * szPassPhrase = "lavalleja1524c";
+    const char * szPassPhrase = "ITBALABS";
     #define WiFiConnectMacro() deIPcK.wfConnect(szSsid, szPassPhrase, &status)
 
 #elif defined(USE_WPA2_KEY)
@@ -96,7 +96,7 @@ int cbRead = 0;
 
 // IOT Logger config
 
-const char *loggerServerIp = "192.168.0.6";
+const char *loggerServerIp = "10.16.35.55";
 const uint16_t loggerServerPort = 4567;
 
 const char *user = "nicobuchhalter"; // This is the only thing that should be needed to be configured
@@ -117,6 +117,9 @@ int lastButtonEndState = LOW;
 int endState;
 
 int seconds;
+int lastCardShow;
+
+int takingTime = 0;
 
 const int maxPot = 4095;
 const int potBounce = 10;
@@ -129,6 +132,7 @@ int cardsLength = 3;
 
 
 char * currentCard;
+char * hoveredCard;
 char * boards[3] = {"board1", "board2", "board3"}; // The idea is to request the API for this data and with the POT choose.
 char * cards[3] = {"card1", "card2", "card3"};
 
@@ -154,8 +158,8 @@ void setup()
     pinMode(END_BUTTON,INPUT);
     pinMode(OK_BUTTON, INPUT);
     pinMode(POT, INPUT);
-
-    Serial.println("Connecting to WiFi...");
+    lastCardShow = millis();
+    // Serial.println("Connecting to WiFi...");
 }
 
 
@@ -164,116 +168,50 @@ void setup()
 void loop()
 {
     int cbRead = 0;
-
-    switch(state)
-    {
-        case CONNECT:
-            delay(100);
-            Serial.println("CONNECT");
-            if (WiFiConnectMacro())
-            {
-                Serial.println("WiFi connected");
-                deIPcK.begin();
-                state = TCPCONNECT;
-            }
-            else if (IsIPStatusAnError(status))
-            {
-                Serial.print("Unable to connect, status: ");
-                Serial.println(status, DEC);
-                state = ERR;
-            }
-            break;
-
-        case TCPCONNECT:
-            delay(100);
-            Serial.print("TCPCONNECT");
-            Serial.print("  ");
-            Serial.print(loggerServerIp);
-            Serial.print(":");
-            Serial.println(loggerServerPort);
-            if (deIPcK.tcpConnect(loggerServerIp, loggerServerPort, tcpSocket, &status))
-            {
-                Serial.println("Connected to server.");
-                state = WRITE;
-            }
-            else {
-              Serial.print("Status: ");
-              Serial.println(status);
-            }
-            break;
-
-        case WRITE:
-            delay(100);
-            Serial.println("WRITE");
-            if (tcpSocket.isEstablished())
-            {
-                  if(button_pressed(&lastButtonStartState, START_BUTTON)){
-                     Serial.println("Started timer");
-                     startTime = millis();
-                     currentCard = selected_card();
-                  }
-
-                  if(button_pressed(&lastButtonEndState, END_BUTTON)){
-                       seconds = (millis() - startTime) / 1000;
-                        tcpSocket.print("GET /log?seconds=");
-                        tcpSocket.print(seconds);
-                        tcpSocket.print("&card_id=");
-                        tcpSocket.print(card_id);
-                        tcpSocket.print(" HTTP/1.1\r\n");
-                        tcpSocket.print("Host: www.iot-logger.com\r\n");
-                        tcpSocket.print("Content-Type: application/json\r\n");
-                        tcpSocket.print("Accept: */*\r\n");
-                        tcpSocket.print("\r\n");
-
-                        Serial.println();
-                        Serial.println("Bytes Read Back:");
-                        state = READ;
-                        tStart = (unsigned) millis();
-                  }
-
-            }
-            break;
-
-            case READ:
-                delay(100);
-                Serial.println("READ");
-                if ((cbRead = tcpSocket.available()) > 0)
-                {
-                    cbRead = cbRead < sizeof(rgbRead) ? cbRead : sizeof(rgbRead);
-                    cbRead = tcpSocket.readStream(rgbRead, cbRead);
-
-                    for (int i = 0; i < cbRead; i++)
-                    {
-                        Serial.print((char)rgbRead[i]);
-                    }
-                }
-                else if ((((unsigned)millis()) - tStart) > tWait)
-                {
-                    state = CLOSE;
-                }
-
-                break;
-
-        case CLOSE:
-            Serial.println("CLOSE");
-            tcpSocket.close();
-            Serial.println("Closing TCP Socket.");
-            state = TCPCONNECT;
-            break;
-
-        case ERR:
-        default:
-            Serial.println("Entering error state.");
-            blinkForever();
-            break;
+    delay(100);
+    hoveredCard = selected_card();
+    if (millis() - lastCardShow > 500) {
+      lastCardShow = millis();
+      Serial.println(hoveredCard);
+    }
+    
+    if(button_pressed(&lastButtonStartState, OK_BUTTON) && !takingTime){
+      currentCard = hoveredCard;
+      Serial.println("Selected card!");
+    }
+    if(button_pressed(&lastButtonStartState, START_BUTTON)){
+       Serial.println("Started timer");
+       startTime = millis();
+       Serial.println(currentCard);
+       takingTime = 1;
     }
 
+    if(button_pressed(&lastButtonEndState, END_BUTTON)){
+      takingTime = 0;
+         seconds = (millis() - startTime) / 1000;
+          tcpSocket.print("GET /log?seconds=");
+          tcpSocket.print(seconds);
+          tcpSocket.print("&card_id=");
+          tcpSocket.print(card_id);
+          tcpSocket.print(" HTTP/1.1\r\n");
+          tcpSocket.print("Host: www.iot-logger.com\r\n");
+          tcpSocket.print("Content-Type: application/json\r\n");
+          tcpSocket.print("Accept: */*\r\n");
+          tcpSocket.print("\r\n");
+
+          Serial.println();
+          Serial.println("Logging");
+          tStart = (unsigned) millis();
+    }
     DEIPcK::periodicTasks();
 }
 
 char * selected_card() {
-  int pot = digitalRead(POT);
+  int pot = analogRead(POT);
   int potIndex = (int)ceil((pot * cardsLength) / (float)maxPot) - 1;
+  if (potIndex < 0) {
+    potIndex = 0;
+  }
   return cards[potIndex];
 }
 
