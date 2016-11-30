@@ -1,3 +1,5 @@
+
+
 /*
  * iot-logger - WiFire Sketch
  *
@@ -74,6 +76,7 @@ typedef enum
 } STATE;
 
 STATE state = CONNECT;
+IPSTATUS    status;
 
 unsigned tStart = 0;
 unsigned tWait = 5000;
@@ -87,13 +90,15 @@ int cbRead = 0;
 
 // IOT Logger config
 
-const char *loggerServerIp = "127.0.0.1";
-const uint16_t loggerServerPort = 3000;
+const char *loggerServerIp = "192.168.0.6";
+const uint16_t loggerServerPort = 4567;
 
+const char *user = "nicobuchhalter"; // This is the only thing that should be needed to be configured
+const char * card_id = "572a275a7e6673b398bf75a2";
 
 #define LED_PIN 13
 #define START_BUTTON 3
-#define END_BUTTON 1
+#define END_BUTTON 5
 
 unsigned long startTime;
 
@@ -125,9 +130,8 @@ void setup()
     Serial.begin(9600);
     Serial.println("IOT Logger Client 1.0");
     Serial.println("");
-
-    pinMode(LED_PIN, OUTPUT);
     
+    pinMode(LED_PIN, OUTPUT);
     pinMode(START_BUTTON,INPUT);
     pinMode(END_BUTTON,INPUT);
 
@@ -137,14 +141,15 @@ void setup()
 
 
 
-
 void loop()
-{
-    IPSTATUS status;
+{ 
+    int cbRead = 0;
 
     switch(state)
     {
         case CONNECT:
+            delay(100);
+            Serial.println("CONNECT");
             if (WiFiConnectMacro())
             {
                 Serial.println("WiFi connected");
@@ -160,14 +165,26 @@ void loop()
             break;
 
         case TCPCONNECT:
-            if (deIPcK.tcpConnect(agServerIp, agServerPort, tcpSocket))
+            delay(100);
+            Serial.print("TCPCONNECT");
+            Serial.print("  ");
+            Serial.print(loggerServerIp);
+            Serial.print(":");
+            Serial.println(loggerServerPort);
+            if (deIPcK.tcpConnect(loggerServerIp, loggerServerPort, tcpSocket, &status))
             {
                 Serial.println("Connected to server.");
                 state = WRITE;
             }
-        break;
+            else {
+              Serial.print("Status: ");
+              Serial.println(status);
+            }
+            break;
 
         case WRITE:
+            delay(100);
+            Serial.println("WRITE");
             int seconds, readingStart, readingEnd;
             if (tcpSocket.isEstablished())
             {
@@ -203,8 +220,10 @@ void loop()
                     
                     if(endState == HIGH){
                        seconds = (millis() - startTime) / 1000.0;
-                        tcpSocket.print("POST /log?seconds=");
+                        tcpSocket.print("GET /log?seconds=");
                         tcpSocket.print(seconds);
+                        tcpSocket.print("&card_id=");
+                        tcpSocket.print(card_id);
                         tcpSocket.print(" HTTP/1.1\r\n");
                         tcpSocket.print("Host: www.iot-logger.com\r\n");
                         tcpSocket.print("Content-Type: application/json\r\n");
@@ -222,6 +241,8 @@ void loop()
             break;
 
             case READ:
+                delay(100);
+                Serial.println("READ");
                 if ((cbRead = tcpSocket.available()) > 0)
                 {
                     cbRead = cbRead < sizeof(rgbRead) ? cbRead : sizeof(rgbRead);
@@ -240,6 +261,7 @@ void loop()
                 break;
 
         case CLOSE:
+            Serial.println("CLOSE");
             tcpSocket.close();
             Serial.println("Closing TCP Socket.");
             state = TCPCONNECT;
