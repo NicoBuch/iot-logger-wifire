@@ -97,22 +97,30 @@ const char *user = "nicobuchhalter"; // This is the only thing that should be ne
 const char * card_id = "572a275a7e6673b398bf75a2";
 
 #define LED_PIN 13
-#define START_BUTTON 3
-#define END_BUTTON 5
+#define START_BUTTON 5
+#define END_BUTTON 3
+#define POT A0
+#define OK_BUTTON 8 // This is to select the correct board or card
 
 unsigned long startTime;
 
 int startState;
 int lastButtonStartState = LOW;
-unsigned long lastDebounceStartTime = 0;  // the last time the output pin was toggled
 
 int lastButtonEndState = LOW;
 int endState;
 
-unsigned long lastDebounceEndTime = 0;  // the last time the output pin was toggled
+int seconds;
 
-unsigned long debounceDelay = 50;    // the debounce time; increase if the output flickers
+const int maxPot = 4095;
+const int potBounce = 10;
 
+int currentPot;
+int lastPot = 0;
+
+
+char * boards[3] = {"board1", "board2", "board3"}; // The idea is to request the API for this data and with the POT choose.
+char * cards[3] = {"card1", "card2", "card3"};
 
 void blinkForever()
 {
@@ -134,7 +142,9 @@ void setup()
     pinMode(LED_PIN, OUTPUT);
     pinMode(START_BUTTON,INPUT);
     pinMode(END_BUTTON,INPUT);
-
+    pinMode(OK_BUTTON, INPUT);
+    pinMode(POT, INPUT);
+    
     Serial.println("Connecting to WiFi...");
 }
 
@@ -185,41 +195,14 @@ void loop()
         case WRITE:
             delay(100);
             Serial.println("WRITE");
-            int seconds, readingStart, readingEnd;
             if (tcpSocket.isEstablished())
             {
-                  // Debounce algorithm from https://www.arduino.cc/en/Tutorial/Debounce
-                  readingStart = digitalRead(START_BUTTON);
-
-                  if(lastButtonStartState != readingStart){
-                    lastDebounceStartTime = millis();
+                  if(button_pressed(&lastButtonStartState, START_BUTTON)){
+                     Serial.println("Started timer");
+                     startTime = millis();
                   }
-
-                  if((millis() - lastDebounceStartTime) > debounceDelay){
-                    if(readingStart != startState){
-                      startState = readingStart;
-                    }
-                    
-                    if(startState == HIGH){
-                       Serial.println("Started timer");
-                       startTime = millis();
-                    }
-                  }
-                  lastButtonStartState = readingStart;
-
-                  
-                  readingEnd = digitalRead(END_BUTTON);
-                  if(lastButtonEndState != readingEnd){
-                    lastDebounceEndTime = millis();
-                  }
-
-                  if((millis() - lastDebounceEndTime) > debounceDelay){
-                    if(readingEnd != endState){
-                      endState = readingEnd;
-                    }
-                    
-                    if(endState == HIGH){
-                       seconds = (millis() - startTime) / 1000.0;
+                  if(button_pressed(&lastButtonEndState, END_BUTTON)){
+                       seconds = (millis() - startTime) / 1000;
                         tcpSocket.print("GET /log?seconds=");
                         tcpSocket.print(seconds);
                         tcpSocket.print("&card_id=");
@@ -234,9 +217,8 @@ void loop()
                         Serial.println("Bytes Read Back:");
                         state = READ;
                         tStart = (unsigned) millis();
-                    }
                   }
-                  lastButtonEndState = readingEnd;
+
             }
             break;
 
@@ -276,3 +258,21 @@ void loop()
 
     DEIPcK::periodicTasks();
 }
+
+
+
+bool button_pressed(int* lastButtonState, int button){
+  int state = digitalRead(button);
+  
+  bool answer = false;
+  if(*lastButtonState != state){
+      if(state == HIGH){
+         answer = true;
+      }
+  }
+  *lastButtonState = state;
+  
+  return answer;
+  
+}
+
