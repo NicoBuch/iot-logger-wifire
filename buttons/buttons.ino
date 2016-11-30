@@ -9,6 +9,7 @@
 #include <MRF24G.h>
 #include <DEIPcK.h>
 #include <DEWFcK.h>
+#include <math.h>
 
 // CONSTANTS
 
@@ -30,9 +31,9 @@ const char *szSsid = "nicobuch";
 
 #elif defined(USE_WPA2_KEY)
 
-    DEWFcK::WPA2KEY key = { 0x27, 0x2C, 0x89, 0xCC, 0xE9, 0x56, 0x31, 0x1E, 
-                            0x3B, 0xAD, 0x79, 0xF7, 0x1D, 0xC4, 0xB9, 0x05, 
-                            0x7A, 0x34, 0x4C, 0x3E, 0xB5, 0xFA, 0x38, 0xC2, 
+    DEWFcK::WPA2KEY key = { 0x27, 0x2C, 0x89, 0xCC, 0xE9, 0x56, 0x31, 0x1E,
+                            0x3B, 0xAD, 0x79, 0xF7, 0x1D, 0xC4, 0xB9, 0x05,
+                            0x7A, 0x34, 0x4C, 0x3E, 0xB5, 0xFA, 0x38, 0xC2,
                             0x0F, 0x0A, 0xB0, 0x90, 0xDC, 0x62, 0xAD, 0x58 };
     #define WiFiConnectMacro() deIPcK.wfConnect(szSsid, key, &status)
 
@@ -74,6 +75,11 @@ typedef enum
     CLOSE,
     ERR
 } STATE;
+
+struct Card {
+  char * name;
+  char * id;
+};
 
 STATE state = CONNECT;
 IPSTATUS    status;
@@ -119,6 +125,10 @@ int currentPot;
 int lastPot = 0;
 
 
+int cardsLength = 3;
+
+
+char * currentCard;
 char * boards[3] = {"board1", "board2", "board3"}; // The idea is to request the API for this data and with the POT choose.
 char * cards[3] = {"card1", "card2", "card3"};
 
@@ -129,7 +139,7 @@ void blinkForever()
         digitalWrite(LED_PIN, HIGH);
         delay(500);
         digitalWrite(LED_PIN, LOW);
-        delay(500);   
+        delay(500);
     }
 }
 
@@ -138,13 +148,13 @@ void setup()
     Serial.begin(9600);
     Serial.println("IOT Logger Client 1.0");
     Serial.println("");
-    
+
     pinMode(LED_PIN, OUTPUT);
     pinMode(START_BUTTON,INPUT);
     pinMode(END_BUTTON,INPUT);
     pinMode(OK_BUTTON, INPUT);
     pinMode(POT, INPUT);
-    
+
     Serial.println("Connecting to WiFi...");
 }
 
@@ -152,7 +162,7 @@ void setup()
 
 
 void loop()
-{ 
+{
     int cbRead = 0;
 
     switch(state)
@@ -200,7 +210,9 @@ void loop()
                   if(button_pressed(&lastButtonStartState, START_BUTTON)){
                      Serial.println("Started timer");
                      startTime = millis();
+                     currentCard = selected_card();
                   }
+
                   if(button_pressed(&lastButtonEndState, END_BUTTON)){
                        seconds = (millis() - startTime) / 1000;
                         tcpSocket.print("GET /log?seconds=");
@@ -212,7 +224,7 @@ void loop()
                         tcpSocket.print("Content-Type: application/json\r\n");
                         tcpSocket.print("Accept: */*\r\n");
                         tcpSocket.print("\r\n");
-                        
+
                         Serial.println();
                         Serial.println("Bytes Read Back:");
                         state = READ;
@@ -259,11 +271,17 @@ void loop()
     DEIPcK::periodicTasks();
 }
 
+char * selected_card() {
+  int pot = digitalRead(POT);
+  int potIndex = (int)ceil((pot * cardsLength) / (float)maxPot) - 1;
+  return cards[potIndex];
+}
+
 
 
 bool button_pressed(int* lastButtonState, int button){
   int state = digitalRead(button);
-  
+
   bool answer = false;
   if(*lastButtonState != state){
       if(state == HIGH){
@@ -271,8 +289,8 @@ bool button_pressed(int* lastButtonState, int button){
       }
   }
   *lastButtonState = state;
-  
+
   return answer;
-  
+
 }
 
